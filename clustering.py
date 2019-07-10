@@ -21,7 +21,7 @@ if __name__ == '__main__':
     vectors_list = [model.docvecs[n] for n in range(len(model.docvecs))]
 
     start_time = time.time()
-    embedding = umap.UMAP(n_neighbors=5, n_components=3).fit_transform(vectors_list)
+    embedding = umap.UMAP(n_neighbors=15, n_components=3).fit_transform(vectors_list)
     # embedding = PCA().fit_transform(vectors_list)
     interval = time.time() - start_time
 

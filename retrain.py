@@ -1,5 +1,9 @@
 import pandas as pd
+import numpy as np
+import sys
+from os import listdir, path
 from gensim import models
+from gensim.models.doc2vec import LabeledSentence
 from janome.tokenizer import Tokenizer
 from janome.analyzer import Analyzer
 from janome.charfilter import *
@@ -16,7 +20,6 @@ def split_into_words(text, tokenizer):
     ret = []
     for idx in range(len(tokens)):
         token = tokens[idx]
-        # print(token)
         if idx+1 == len(tokens):
             if parts[0] == '名詞' and parts[1] != '接尾' and parts[1] != '副詞可能':
                 ret.append(token.base_form)
@@ -40,45 +43,49 @@ def split_into_words(text, tokenizer):
             ret.append(token.base_form)
     return ret
 
+def doc_to_sentence(doc, name, tokenizer):
+    words = split_into_words(doc, tokenizer)
+    return LabeledSentence(words=words, tags=[name])
+
+class corpus_to_sentences():
+    def __init__(self, corpus, tokenizer):
+        self.current = 0
+        self.tokenizer = tokenizer
+        self.corpus = corpus
+        self.keys = list(corpus.keys())
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.current == len(self.keys):
+            raise StopIteration()
+        key = self.keys[self.current]
+        sys.stdout.write('\r前処理中 {}/{}'.format(self.current, len(self.keys)))
+        item = doc_to_sentence(self.corpus[key], key, self.tokenizer)
+        self.current += 1
+        return item
+
 if __name__ == '__main__':
     tokenizer = Tokenizer(mmap=True)
     char_filters = [UnicodeNormalizeCharFilter()]
     token_filters = [POSStopFilter(['記号','助詞']), LowerCaseFilter()]
     analyzer = Analyzer(char_filters, tokenizer, token_filters)
 
-    model_path = './models/doc2vec.model'
-    delim = '_'
-
     programs = pd.read_pickle('data/example/programs.pkl')
     p_text = {'prog_%d'%key: programs[key]['text'] for key in programs.keys()}
 
     creatives = pd.read_pickle('data/example/creatives.pkl')
-    c_text = {'crea_%d'%key: (creatives[key]['text'], creatives[key]['creative_category']) for key in creatives.keys()}
+    c_text = {'crea_%d'%key: creatives[key]['text'] for key in creatives.keys()}
 
-    p_id = list(p_text.keys())[2]
-    print(p_id)
-    # print(split_into_words(p_text[p_id], analyzer))
-    print(p_text[p_id])
-    # print(p_text[p_id][1])
-    print()
-    print()
-    print()
+    model_path = './models/pretrain/doc2vec.model'
 
+
+    corpus = {}
+    corpus.update(p_text)
+    corpus.update(c_text)
+    sentences = corpus_to_sentences(corpus, analyzer)
     model = models.Doc2Vec.load(model_path)
-    syms = model.docvecs.most_similar(p_id, topn=15)
-    # print(model.docvecs[0])
+    model.train(sentences, total_examples=len(corpus), epochs=40)
 
-    for s_id in syms:
-        prefix = s_id[0].split(delim)[0]
-        if prefix == 'prog':
-            continue
-            # print(s_id[1])
-            # print(p_text[s_id[0]])
-            # print(p_text[s_id[0]][1])
-        else:
-            print(s_id[1])
-            print(c_text[s_id[0]][0])
-            print(c_text[s_id[0]][1])
-            # print(split_into_words(c_text[s_id[0]], analyzer))
-            print()
-
+    model.save('./models/pretrain/retrained_doc2vec.model')

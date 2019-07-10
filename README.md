@@ -16,3 +16,6 @@
 ## 使用する単語
 使用する単語は名詞と形容詞のみに限定。
 
+## 参考
+http://tadaoyamaoka.hatenablog.com/entry/2017/04/29/122128
+

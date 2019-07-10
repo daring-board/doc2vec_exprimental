@@ -1,5 +1,3 @@
-import pandas as pd
-import numpy as np
 import sys
 from os import listdir, path
 from gensim import models
@@ -10,6 +8,15 @@ from janome.charfilter import *
 from janome.tokenfilter import *
 import neologdn
 import re
+
+def corpus_files():
+    base_path = './data/text'
+    dirs = [path.join(base_path, x) for x in listdir(base_path) if not x.endswith('.txt')]
+    docs = [path.join(x, y) for x in dirs for y in listdir(x) if not x.startswith('LICENSE')]
+    return docs
+
+def read_document(path):
+    with open(path, 'r', encoding='utf8') as f: return f.read()
 
 def split_into_words(text, tokenizer):
     # tokens = tokenizer.tokenize(text)
@@ -48,39 +55,30 @@ def doc_to_sentence(doc, name, tokenizer):
     return LabeledSentence(words=words, tags=[name])
 
 class corpus_to_sentences():
-    def __init__(self, corpus, tokenizer):
+    def __init__(self, corpus):
+        docs = [read_document(x) for x in corpus]
+        self.obj = list(zip(docs, corpus))
         self.current = 0
-        self.tokenizer = tokenizer
-        self.corpus = corpus
-        self.keys = list(corpus.keys())
+        tokenizer = Tokenizer(mmap=True)
+        char_filters = [UnicodeNormalizeCharFilter()]
+        token_filters = [POSStopFilter(['記号','助詞']), LowerCaseFilter()]
+        self.tokenizer = Analyzer(char_filters, tokenizer, token_filters)
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        if self.current == len(self.keys):
+        if self.current == len(self.obj):
             raise StopIteration()
-        key = self.keys[self.current]
-        sys.stdout.write('\r前処理中 {}/{}'.format(self.current, len(self.keys)))
-        item = doc_to_sentence(self.corpus[key], key, self.tokenizer)
+        (doc, name) = self.obj[self.current]
+        # print(name)
+        sys.stdout.write('\r前処理中 {}/{}'.format(self.current, len(self.obj)))
         self.current += 1
-        return item
+        return doc_to_sentence(doc, name.split('\\')[-1], self.tokenizer)
 
-if __name__ == '__main__':
-    tokenizer = Tokenizer(mmap=True)
-    char_filters = [UnicodeNormalizeCharFilter()]
-    token_filters = [POSStopFilter(['記号','助詞']), LowerCaseFilter()]
-    analyzer = Analyzer(char_filters, tokenizer, token_filters)
+if __name__ == "__main__":
+    corpus = corpus_files()
+    sentences = corpus_to_sentences(corpus)
 
-    programs = pd.read_pickle('data/example/programs.pkl')
-    p_text = {'prog_%d'%key: programs[key]['text'] for key in programs.keys()}
-
-    creatives = pd.read_pickle('data/example/creatives.pkl')
-    c_text = {'crea_%d'%key: creatives[key]['text'] for key in creatives.keys()}
-
-    corpus = {}
-    corpus.update(p_text)
-    corpus.update(c_text)
-    sentences = corpus_to_sentences(corpus, analyzer)
-    model = models.Doc2Vec(sentences, dm=1, size=150, window=10, workers=6, epochs=10)
-    model.save('./models/doc2vec.model')
+    model = models.Doc2Vec(sentences, dm=0, size=300, window=10, workers=6)
+    model.save('./models/pretrain/doc2vec.model')
